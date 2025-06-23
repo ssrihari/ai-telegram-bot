@@ -1,4 +1,4 @@
-.PHONY: help setup run stop
+.PHONY: help setup run run-bg stop
 
 help: ## Show this help message
 	@echo "Available targets:"
@@ -28,6 +28,17 @@ setup: ## Install development prerequisites (Fly CLI, Python deps)
 run: ## Start the FastAPI server
 	uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+run-bg: ## Start the FastAPI server in background
+	@echo "Starting FastAPI server in background..."
+	@uvicorn main:app --host 0.0.0.0 --port 8000 --reload & echo $$! > .server.pid
+	@echo "Server started with PID $$(cat .server.pid)"
+
 stop: ## Stop the FastAPI server
-	@echo "Stopping FastAPI server..."
-	@lsof -ti:8000 | xargs kill -9 2>/dev/null || echo "No server running on port 8000"
+	@if [ -f .server.pid ]; then \
+		echo "Stopping server with PID $$(cat .server.pid)..."; \
+		kill $$(cat .server.pid) 2>/dev/null || echo "Process not found"; \
+		rm -f .server.pid; \
+	else \
+		echo "Stopping any server on port 8000..."; \
+		lsof -ti:8000 | xargs kill 2>/dev/null || echo "No server running on port 8000"; \
+	fi
