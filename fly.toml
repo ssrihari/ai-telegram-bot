@@ -1,20 +1,23 @@
-app = "telegram-bot-maker"
-primary_region = "ord"
+# fly.toml app configuration file generated for ai-telegram-bot on 2025-06-23T20:30:02Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ai-telegram-bot'
+primary_region = 'yyz'
 
 [build]
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  memory = "256mb"
-  cpu_kind = "shared"
+  memory = '256mb'
+  cpu_kind = 'shared'
   cpus = 1
-
-[env]
-  PORT = "8000"
+  memory_mb = 256
