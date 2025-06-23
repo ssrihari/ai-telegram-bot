@@ -1,4 +1,4 @@
-.PHONY: help setup
+.PHONY: help setup run stop
 
 help: ## Show this help message
 	@echo "Available targets:"
@@ -24,3 +24,10 @@ setup: ## Install development prerequisites (Fly CLI, Python deps)
 		echo "No requirements.txt found"; \
 	fi
 	@echo "Setup complete!"
+
+run: ## Start the FastAPI server
+	uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+stop: ## Stop the FastAPI server
+	@echo "Stopping FastAPI server..."
+	@lsof -ti:8000 | xargs kill -9 2>/dev/null || echo "No server running on port 8000"
