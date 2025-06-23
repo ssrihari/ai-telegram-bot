@@ -1,4 +1,4 @@
-.PHONY: help setup run run-bg stop
+.PHONY: help setup run run-bg stop deploy login
 
 help: ## Show this help message
 	@echo "Available targets:"
@@ -42,3 +42,23 @@ stop: ## Stop the FastAPI server
 		echo "Stopping any server on port 8000..."; \
 		lsof -ti:8000 | xargs kill 2>/dev/null || echo "No server running on port 8000"; \
 	fi
+
+login: ## Login to Fly.io
+	flyctl auth login
+
+deploy: ## Deploy to Fly.io
+	@echo "Deploying to Fly.io..."
+	@if ! flyctl status > /dev/null 2>&1; then \
+		echo "App not found, launching new app..."; \
+		flyctl launch --no-deploy; \
+	fi
+	@echo "Setting secrets..."
+	@if [ -f .env ]; then \
+		flyctl secrets set TELEGRAM_BOT_TOKEN=$$(grep TELEGRAM_BOT_TOKEN .env | cut -d'=' -f2) || echo "Failed to set TELEGRAM_BOT_TOKEN"; \
+		flyctl secrets set OPENAI_API_KEY=$$(grep OPENAI_API_KEY .env | cut -d'=' -f2) || echo "Failed to set OPENAI_API_KEY"; \
+		flyctl secrets set LITELLM_MODEL=$$(grep LITELLM_MODEL .env | cut -d'=' -f2) || echo "Failed to set LITELLM_MODEL"; \
+	fi
+	@if [ -f persona.md ]; then \
+		flyctl secrets set SYSTEM_PROMPT="$$(cat persona.md)" || echo "Failed to set SYSTEM_PROMPT"; \
+	fi
+	flyctl deploy
