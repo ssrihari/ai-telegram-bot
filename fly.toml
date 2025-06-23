@@ -1,4 +1,4 @@
-app = "telegram-bot-maker"
+app = "ai-telegram-bot"
 primary_region = "ord"
 
 [build]
