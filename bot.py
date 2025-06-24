@@ -44,8 +44,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Get LLM response
     llm_response = await get_llm_response(user_message)
     
-    # Send response back to user
-    await update.message.reply_text(llm_response)
+    # Split response into paragraphs and send each as separate message
+    paragraphs = [p.strip() for p in llm_response.split('\n\n') if p.strip()]
+    
+    for paragraph in paragraphs:
+        await update.message.reply_text(paragraph)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""
