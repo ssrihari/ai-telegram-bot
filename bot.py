@@ -1,20 +1,12 @@
 import os
-import asyncio
 import json
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai_client import get_openai_assistants_response, clear_conversation_state
 
 load_dotenv()
-
-# Global dictionary to store conversation state per chat
-# Structure: {chat_id: {"assistant_id": "...", "thread_id": "..."}}
-conversation_state = {}
-
-# Initialize OpenAI client
-openai_client = None
 
 def log_llm_interaction(user_message: str, llm_response: str, model: str, telegram_update: dict = None, error: str = None, response_id: str = None):
     """Log LLM requests and responses to a file."""
@@ -33,75 +25,6 @@ def log_llm_interaction(user_message: str, llm_response: str, model: str, telegr
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"Failed to write log: {e}")
-
-async def get_openai_client():
-    """Get or create OpenAI client."""
-    global openai_client
-    if openai_client is None:
-        openai_client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    return openai_client
-
-async def get_or_create_assistant(system_prompt: str, model: str) -> str:
-    """Get or create an OpenAI assistant."""
-    client = await get_openai_client()
-    
-    # For simplicity, create a new assistant each time
-    # In production, you might want to cache/reuse assistants
-    assistant = await client.beta.assistants.create(
-        name="Telegram Bot Assistant",
-        instructions=system_prompt,
-        model=model
-    )
-    return assistant.id
-
-async def get_openai_assistants_response(user_message: str, chat_id: int, model: str, system_prompt: str) -> tuple[str, str]:
-    """Get response using OpenAI Assistants API with conversation state."""
-    client = await get_openai_client()
-    
-    # Get or create conversation state for this chat
-    if chat_id not in conversation_state:
-        assistant_id = await get_or_create_assistant(system_prompt, model)
-        thread = await client.beta.threads.create()
-        conversation_state[chat_id] = {
-            "assistant_id": assistant_id,
-            "thread_id": thread.id
-        }
-    
-    chat_state = conversation_state[chat_id]
-    
-    # Add message to thread
-    await client.beta.threads.messages.create(
-        thread_id=chat_state["thread_id"],
-        role="user",
-        content=user_message
-    )
-    
-    # Run the assistant
-    run = await client.beta.threads.runs.create(
-        thread_id=chat_state["thread_id"],
-        assistant_id=chat_state["assistant_id"]
-    )
-    
-    # Wait for completion
-    while run.status in ['queued', 'in_progress']:
-        await asyncio.sleep(1)
-        run = await client.beta.threads.runs.retrieve(
-            thread_id=chat_state["thread_id"],
-            run_id=run.id
-        )
-    
-    if run.status == 'completed':
-        # Get the assistant's response
-        messages = await client.beta.threads.messages.list(
-            thread_id=chat_state["thread_id"],
-            order="desc",
-            limit=1
-        )
-        
-        response_content = messages.data[0].content[0].text.value
-        return response_content, run.id
-    else:
-        raise Exception(f"Assistant run failed with status: {run.status}")
 
 async def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
     """Get response from OpenAI using Assistants API."""
@@ -158,8 +81,7 @@ async def new_conversation_command(update: Update, context: ContextTypes.DEFAULT
     chat_id = update.message.chat.id
     
     # Remove conversation state for this chat
-    if chat_id in conversation_state:
-        del conversation_state[chat_id]
+    if clear_conversation_state(chat_id):
         await update.message.reply_text('🔄 Started a new conversation! Previous context has been cleared.')
     else:
         await update.message.reply_text('🔄 Starting fresh! This is already a new conversation.')
