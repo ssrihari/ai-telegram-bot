@@ -3,16 +3,53 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
+import litellm
 
 load_dotenv()
 
+async def get_llm_response(user_message: str) -> str:
+    """Get response from LLM using LiteLLM."""
+    try:
+        # Get system prompt from environment or use default
+        system_prompt = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
+        
+        # Get model from environment or use default
+        model = os.getenv('LITELLM_MODEL', 'gpt-4o')
+        
+        # Determine which API key to use based on model
+        if model.startswith('claude'):
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+        else:
+            api_key = os.getenv('OPENAI_API_KEY')
+            
+        response = await litellm.acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            api_key=api_key
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"LLM error: {e}")
+        return "Sorry, I'm having trouble processing your message right now."
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle any incoming message and respond with 'foo'."""
-    await update.message.reply_text('foo')
+    """Handle any incoming message and respond using LLM."""
+    user_message = update.message.text
+    
+    # Get LLM response
+    llm_response = await get_llm_response(user_message)
+    
+    # Send response back to user
+    await update.message.reply_text(llm_response)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""
-    await update.message.reply_text('Bot is running! Send me any message and I\'ll respond with "foo".')
+    await update.message.reply_text('Bot is running! Send me any message and I\'ll respond using AI.')
 
 def create_bot_application():
     """Create and configure the Telegram bot application."""
