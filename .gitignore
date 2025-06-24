@@ -4,6 +4,9 @@
 # Claude Code
 .claude/
 
+# Log files
+llm_logs.jsonl
+
 # Python
 __pycache__/
 *.py[cod]
