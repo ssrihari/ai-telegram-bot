@@ -26,11 +26,28 @@ def log_llm_interaction(user_message: str, llm_response: str, model: str, telegr
     except Exception as e:
         print(f"Failed to write log: {e}")
 
+def load_enhanced_system_prompt() -> str:
+    """Load system prompt from environment and append how-to-talk-to-kids.md content."""
+    base_prompt = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
+    
+    try:
+        with open('how-to-talk-to-kids.md', 'r', encoding='utf-8') as f:
+            book_content = f.read()
+        
+        enhanced_prompt = f"{base_prompt}\n\n```\n{book_content}\n```"
+        return enhanced_prompt
+    except FileNotFoundError:
+        print("Warning: how-to-talk-to-kids.md not found, using base prompt only")
+        return base_prompt
+    except Exception as e:
+        print(f"Error loading how-to-talk-to-kids.md: {e}")
+        return base_prompt
+
 async def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
     """Get response from OpenAI using Assistants API."""
     try:
-        # Get system prompt from environment or use default
-        system_prompt = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
+        # Get enhanced system prompt with book content
+        system_prompt = load_enhanced_system_prompt()
         
         # Get model from environment or use default
         model = os.getenv('OPENAI_MODEL', 'gpt-4o')
@@ -59,6 +76,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handle any incoming message and respond using LLM."""
     user_message = update.message.text
     chat_id = update.message.chat.id
+    
+    # Check if this is a reply to another message
+    if update.message.reply_to_message:
+        replied_text = update.message.reply_to_message.text or "[Non-text message]"
+        # Format the message with the reply context
+        user_message = f"[Replying to: \"{replied_text}\"]\n\n{user_message}"
     
     # Convert Telegram update to dict for logging
     telegram_update_dict = update.to_dict()
