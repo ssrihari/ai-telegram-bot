@@ -1,5 +1,5 @@
 # Purpose
-I want a bot that will join me in a telegram channel. This bot will be powered by an LLM, with a pre-defined system prompt. It will respond to messages that are posted in the chat like a normal person.
+I wanted a bot that will join me in a telegram group chat, and give me advice to talking to my son. This bot is powered by an LLM, with a pre-defined system prompt. It will respond to messages that are posted in the chat like a normal person.
 
 - The bot behaves as a human participant in a Telegram group chat.
 - It is actively helpful, but responds only when directly mentioned.
