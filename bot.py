@@ -4,7 +4,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from openai_client import get_openai_assistants_response, clear_conversation_state
+from openai_client import get_openai_assistants_response, clear_conversation_state, update_assistant_instructions
 
 load_dotenv()
 
@@ -74,17 +74,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""
-    await update.message.reply_text('Bot is running! Send me any message and I\'ll respond using AI.\n\nUse /new to start a fresh conversation with no previous context.')
+    await update.message.reply_text('Bot is running! Send me any message and I\'ll respond using AI.\n\nCommands:\n/new - Start a fresh conversation\n/instruct <instructions> - Update bot instructions')
 
 async def new_conversation_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /new command to start a fresh conversation."""
     chat_id = update.message.chat.id
     
-    # Remove conversation state for this chat
-    if clear_conversation_state(chat_id):
+    # Create new thread for this chat
+    if await clear_conversation_state(chat_id):
         await update.message.reply_text('🔄 Started a new conversation! Previous context has been cleared.')
     else:
         await update.message.reply_text('🔄 Starting fresh! This is already a new conversation.')
+
+async def instruct_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /instruct command to update assistant instructions."""
+    # Get the instructions from the command arguments
+    if not context.args:
+        await update.message.reply_text('❗ Please provide instructions after the command.\n\nExample: /instruct You are a helpful cooking assistant that provides detailed recipes.')
+        return
+    
+    new_instructions = ' '.join(context.args)
+    
+    try:
+        # Get model from environment
+        model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        
+        # Update the assistant instructions
+        await update_assistant_instructions(new_instructions, model)
+        
+        await update.message.reply_text(f'✅ Assistant instructions updated!\n\nNew instructions: "{new_instructions}"')
+        
+    except Exception as e:
+        await update.message.reply_text(f'❌ Failed to update instructions: {str(e)}')
 
 def create_bot_application():
     """Create and configure the Telegram bot application."""
@@ -97,6 +118,7 @@ def create_bot_application():
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("new", new_conversation_command))
+    application.add_handler(CommandHandler("instruct", instruct_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     return application
