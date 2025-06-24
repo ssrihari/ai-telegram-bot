@@ -5,7 +5,6 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-import litellm
 from openai import AsyncOpenAI
 
 load_dotenv()
@@ -105,45 +104,18 @@ async def get_openai_assistants_response(user_message: str, chat_id: int, model:
         raise Exception(f"Assistant run failed with status: {run.status}")
 
 async def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
-    """Get response from LLM using appropriate API."""
+    """Get response from OpenAI using Assistants API."""
     try:
         # Get system prompt from environment or use default
         system_prompt = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
         
         # Get model from environment or use default
-        model = os.getenv('LITELLM_MODEL', 'gpt-4o')
+        model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         
-        response_id = None
-        
-        if model.startswith('claude'):
-            # Use LiteLLM for Claude (no conversation state)
-            response = await litellm.acompletion(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                api_key=os.getenv('ANTHROPIC_API_KEY')
-            )
-            llm_response = response.choices[0].message.content
-            
-        else:
-            # Use OpenAI Assistants API for conversation state
-            if chat_id:
-                llm_response, response_id = await get_openai_assistants_response(
-                    user_message, chat_id, model, system_prompt
-                )
-            else:
-                # Fallback to regular completion if no chat_id
-                response = await litellm.acompletion(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    api_key=os.getenv('OPENAI_API_KEY')
-                )
-                llm_response = response.choices[0].message.content
+        # Use OpenAI Assistants API for conversation state
+        llm_response, response_id = await get_openai_assistants_response(
+            user_message, chat_id, model, system_prompt
+        )
         
         # Log successful interaction
         log_llm_interaction(user_message, llm_response, model, telegram_update, response_id=response_id)
@@ -152,11 +124,11 @@ async def get_llm_response(user_message: str, telegram_update: dict = None, chat
         
     except Exception as e:
         error_msg = str(e)
-        print(f"LLM error: {error_msg}")
+        print(f"OpenAI error: {error_msg}")
         fallback_response = "Sorry, I'm having trouble processing your message right now."
         
         # Log failed interaction
-        log_llm_interaction(user_message, fallback_response, model or "unknown", telegram_update, error_msg)
+        log_llm_interaction(user_message, fallback_response, model or "gpt-4o", telegram_update, error_msg)
         
         return fallback_response
 

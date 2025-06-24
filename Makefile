@@ -56,7 +56,7 @@ deploy: ## Deploy to Fly.io
 	@if [ -f .env ]; then \
 		flyctl secrets set TELEGRAM_BOT_TOKEN=$$(grep TELEGRAM_BOT_TOKEN .env | cut -d'=' -f2) || echo "Failed to set TELEGRAM_BOT_TOKEN"; \
 		flyctl secrets set OPENAI_API_KEY=$$(grep OPENAI_API_KEY .env | cut -d'=' -f2) || echo "Failed to set OPENAI_API_KEY"; \
-		flyctl secrets set LITELLM_MODEL=$$(grep LITELLM_MODEL .env | cut -d'=' -f2) || echo "Failed to set LITELLM_MODEL"; \
+		flyctl secrets set OPENAI_MODEL=$$(grep OPENAI_MODEL .env | cut -d'=' -f2) || echo "Failed to set OPENAI_MODEL"; \
 	fi
 	@if [ -f persona.md ]; then \
 		flyctl secrets set SYSTEM_PROMPT="$$(cat persona.md)" || echo "Failed to set SYSTEM_PROMPT"; \
