@@ -1,5 +1,7 @@
 import os
 import asyncio
+import json
+from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -7,7 +9,24 @@ import litellm
 
 load_dotenv()
 
-async def get_llm_response(user_message: str) -> str:
+def log_llm_interaction(user_message: str, llm_response: str, model: str, telegram_update: dict = None, error: str = None):
+    """Log LLM requests and responses to a file."""
+    log_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "model": model,
+        "user_message": user_message,
+        "llm_response": llm_response,
+        "telegram_update": telegram_update,
+        "error": error
+    }
+    
+    try:
+        with open("llm_logs.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"Failed to write log: {e}")
+
+async def get_llm_response(user_message: str, telegram_update: dict = None) -> str:
     """Get response from LLM using LiteLLM."""
     try:
         # Get system prompt from environment or use default
@@ -31,18 +50,32 @@ async def get_llm_response(user_message: str) -> str:
             api_key=api_key
         )
         
-        return response.choices[0].message.content
+        llm_response = response.choices[0].message.content
+        
+        # Log successful interaction
+        log_llm_interaction(user_message, llm_response, model, telegram_update)
+        
+        return llm_response
         
     except Exception as e:
-        print(f"LLM error: {e}")
-        return "Sorry, I'm having trouble processing your message right now."
+        error_msg = str(e)
+        print(f"LLM error: {error_msg}")
+        fallback_response = "Sorry, I'm having trouble processing your message right now."
+        
+        # Log failed interaction
+        log_llm_interaction(user_message, fallback_response, model, telegram_update, error_msg)
+        
+        return fallback_response
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle any incoming message and respond using LLM."""
     user_message = update.message.text
     
+    # Convert Telegram update to dict for logging
+    telegram_update_dict = update.to_dict()
+    
     # Get LLM response
-    llm_response = await get_llm_response(user_message)
+    llm_response = await get_llm_response(user_message, telegram_update_dict)
     
     # Split response into paragraphs and send each as separate message
     paragraphs = [p.strip() for p in llm_response.split('\n\n') if p.strip()]
