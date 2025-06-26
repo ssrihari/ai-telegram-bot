@@ -66,17 +66,28 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
         response_id = None
         first_chunk_time = None
         
-        for chunk in stream:
+        for event in stream:
             if first_chunk_time is None:
                 first_chunk_time = time.time()
-                print(f"[TIMING] First chunk received at: {datetime.now().isoformat()} (after {(first_chunk_time - stream_start)*1000:.1f}ms)")
+                print(f"[TIMING] First event received at: {datetime.now().isoformat()} (after {(first_chunk_time - stream_start)*1000:.1f}ms)")
+            
+            # Print event for debugging
+            print(f"[DEBUG] Event type: {event.type if hasattr(event, 'type') else 'unknown'}")
             
             # Handle different types of streaming events
-            if hasattr(chunk, 'type'):
-                if chunk.type == 'content.delta':
-                    # Accumulate text content
-                    if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
-                        current_text += chunk.delta.text
+            if hasattr(event, 'type'):
+                if event.type == 'response.created':
+                    print(f"[TIMING] Response created event received")
+                    if hasattr(event, 'response'):
+                        response_id = event.response.id
+                        print(f"[DEBUG] Response ID: {response_id}")
+                
+                elif event.type == 'response.output_text.delta':
+                    # Accumulate text content from delta events
+                    if hasattr(event, 'delta'):
+                        delta_text = event.delta
+                        current_text += delta_text
+                        print(f"[DEBUG] Delta text: '{delta_text}'")
                         
                         # Check for complete paragraphs (double newline)
                         while '\n\n' in current_text:
@@ -91,10 +102,10 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
                                 sent_paragraphs.append(paragraph)
                                 print(f"[TIMING] Paragraph sent in {(paragraph_send_end - paragraph_send_start)*1000:.1f}ms: {paragraph[:50]}...")
                 
-                elif chunk.type == 'response.done':
+                elif event.type == 'response.completed':
                     # Stream completed, get response ID
-                    if hasattr(chunk, 'response'):
-                        response_id = chunk.response.id
+                    if hasattr(event, 'response'):
+                        response_id = event.response.id
                         print(f"[TIMING] Stream completed at: {datetime.now().isoformat()}")
                         
                         # Update conversation state
@@ -102,6 +113,10 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
                         conversation_state[chat_id] = {
                             "previous_response_id": response_id
                         }
+                
+                elif event.type == 'error':
+                    print(f"[ERROR] Streaming error: {event}")
+                    raise Exception(f"Streaming error: {event}")
         
         # Send any remaining text as final paragraph
         if current_text.strip() and current_text.strip() not in sent_paragraphs:
