@@ -147,12 +147,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def new_conversation_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /new command to start a fresh conversation."""
     chat_id = update.message.chat.id
-    
+
     # Clear conversation state for this chat
     if clear_conversation_state(chat_id):
-        await update.message.reply_text('🔄 Started a new conversation! Previous context has been cleared.')
+        await update.message.reply_text('🔄 Started a new conversation! Previous context has been cleared. Rant away, or ask for a list of all tools, and then dive in.')
     else:
-        await update.message.reply_text('🔄 Starting fresh! This is already a new conversation.')
+        await update.message.reply_text('🔄 Starting fresh! Rant away, or ask for a list of all tools, and then dive in.')
 
 async def instruct_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /instruct command to update assistant instructions."""
