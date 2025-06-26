@@ -1,7 +1,6 @@
 import os
 import json
 import asyncio
-import time
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -54,9 +53,6 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
         # Get model from environment or use default
         model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         
-        print(f"[TIMING] Starting streaming request at: {datetime.now().isoformat()}")
-        stream_start = time.time()
-        
         # Get streaming response from OpenAI
         stream = stream_openai_responses(user_message, chat_id, model, system_prompt)
         
@@ -64,30 +60,19 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
         current_text = ""
         sent_paragraphs = []
         response_id = None
-        first_chunk_time = None
         
         for event in stream:
-            if first_chunk_time is None:
-                first_chunk_time = time.time()
-                print(f"[TIMING] First event received at: {datetime.now().isoformat()} (after {(first_chunk_time - stream_start)*1000:.1f}ms)")
-            
-            # Print event for debugging
-            print(f"[DEBUG] Event type: {event.type if hasattr(event, 'type') else 'unknown'}")
-            
             # Handle different types of streaming events
             if hasattr(event, 'type'):
                 if event.type == 'response.created':
-                    print(f"[TIMING] Response created event received")
                     if hasattr(event, 'response'):
                         response_id = event.response.id
-                        print(f"[DEBUG] Response ID: {response_id}")
                 
                 elif event.type == 'response.output_text.delta':
                     # Accumulate text content from delta events
                     if hasattr(event, 'delta'):
                         delta_text = event.delta
                         current_text += delta_text
-                        print(f"[DEBUG] Delta text: '{delta_text}'")
                         
                         # Check for complete paragraphs (double newline)
                         while '\n\n' in current_text:
@@ -96,17 +81,13 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
                             current_text = current_text[paragraph_end + 2:]
                             
                             if paragraph and paragraph not in sent_paragraphs:
-                                paragraph_send_start = time.time()
                                 await update.message.reply_text(paragraph)
-                                paragraph_send_end = time.time()
                                 sent_paragraphs.append(paragraph)
-                                print(f"[TIMING] Paragraph sent in {(paragraph_send_end - paragraph_send_start)*1000:.1f}ms: {paragraph[:50]}...")
                 
                 elif event.type == 'response.completed':
                     # Stream completed, get response ID
                     if hasattr(event, 'response'):
                         response_id = event.response.id
-                        print(f"[TIMING] Stream completed at: {datetime.now().isoformat()}")
                         
                         # Update conversation state
                         from openai_client import conversation_state
@@ -115,14 +96,12 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
                         }
                 
                 elif event.type == 'error':
-                    print(f"[ERROR] Streaming error: {event}")
                     raise Exception(f"Streaming error: {event}")
         
         # Send any remaining text as final paragraph
         if current_text.strip() and current_text.strip() not in sent_paragraphs:
             await update.message.reply_text(current_text.strip())
             sent_paragraphs.append(current_text.strip())
-            print(f"[TIMING] Final paragraph sent: {current_text.strip()[:50]}...")
         
         # Combine all paragraphs for logging
         full_response = '\n\n'.join(sent_paragraphs)
@@ -130,15 +109,10 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
         # Log successful interaction
         log_llm_interaction(user_message, full_response, model, telegram_update, response_id=response_id)
         
-        stream_end = time.time()
-        total_time = stream_end - stream_start
-        print(f"[TIMING SUMMARY] Total streaming time: {total_time*1000:.1f}ms | Paragraphs sent: {len(sent_paragraphs)}")
-        
         return full_response
         
     except Exception as e:
         error_msg = str(e)
-        print(f"OpenAI streaming error: {error_msg}")
         fallback_response = "Sorry, I'm having trouble processing your message right now."
         
         # Send fallback response
@@ -151,9 +125,6 @@ async def stream_llm_response(user_message: str, telegram_update: dict, chat_id:
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle any incoming message and respond using streaming LLM."""
-    request_start = time.time()
-    print(f"[TIMING] Request received at: {datetime.now().isoformat()}")
-    
     user_message = update.message.text
     chat_id = update.message.chat.id
     
@@ -168,10 +139,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Stream LLM response and send paragraphs as they arrive
     await stream_llm_response(user_message, telegram_update_dict, chat_id, update)
-    
-    request_end = time.time()
-    total_time = request_end - request_start
-    print(f"[TIMING] Total request time: {total_time*1000:.1f}ms")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""

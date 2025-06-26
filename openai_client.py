@@ -42,7 +42,6 @@ def update_system_instructions(new_instructions: str, chat_id: int) -> bool:
     # In Responses API, we need to start fresh to change instructions
     if chat_id in conversation_state:
         del conversation_state[chat_id]
-        print(f"Cleared conversation state for chat {chat_id} to update instructions")
         return True
     return False
 
@@ -68,7 +67,6 @@ def stream_openai_responses(user_message: str, chat_id: int, model: str, system_
     if previous_response_id:
         response_params["previous_response_id"] = previous_response_id
     
-    print(f"Starting streaming response for chat {chat_id}")
     return client.responses.create(**response_params)
 
 def get_openai_responses_response(user_message: str, chat_id: int, model: str, system_prompt: str) -> tuple[str, str]:
@@ -102,13 +100,11 @@ def get_openai_responses_response(user_message: str, chat_id: int, model: str, s
     # Extract response text
     response_content = response.output[0].content[0].text
     
-    print(f"Response created for chat {chat_id}: {response.id}")
     return response_content, response.id
 
 def clear_conversation_state(chat_id: int) -> bool:
     """Clear conversation state for a specific chat."""
     if chat_id in conversation_state:
         del conversation_state[chat_id]
-        print(f"Cleared conversation state for chat {chat_id}")
         return True
     return False
