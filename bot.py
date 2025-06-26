@@ -1,10 +1,11 @@
 import os
 import json
+import asyncio
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from openai_client import get_openai_assistants_response, clear_conversation_state, update_assistant_instructions
+from openai_client import get_openai_responses_response, clear_conversation_state, update_system_instructions
 
 load_dotenv()
 
@@ -43,7 +44,7 @@ def load_enhanced_system_prompt() -> str:
         print(f"Error loading how-to-talk-to-kids.md: {e}")
         return base_prompt
 
-async def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
+def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
     """Get response from OpenAI using Assistants API."""
     try:
         # Get enhanced system prompt with book content
@@ -52,8 +53,8 @@ async def get_llm_response(user_message: str, telegram_update: dict = None, chat
         # Get model from environment or use default
         model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         
-        # Use OpenAI Assistants API for conversation state
-        llm_response, response_id = await get_openai_assistants_response(
+        # Use OpenAI Responses API for conversation state
+        llm_response, response_id = get_openai_responses_response(
             user_message, chat_id, model, system_prompt
         )
         
@@ -87,7 +88,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     telegram_update_dict = update.to_dict()
     
     # Get LLM response with chat context
-    llm_response = await get_llm_response(user_message, telegram_update_dict, chat_id)
+    llm_response = get_llm_response(user_message, telegram_update_dict, chat_id)
     
     # Split response into paragraphs and send each as separate message
     paragraphs = [p.strip() for p in llm_response.split('\n\n') if p.strip()]
@@ -103,8 +104,8 @@ async def new_conversation_command(update: Update, context: ContextTypes.DEFAULT
     """Handle the /new command to start a fresh conversation."""
     chat_id = update.message.chat.id
     
-    # Create new thread for this chat
-    if await clear_conversation_state(chat_id):
+    # Clear conversation state for this chat
+    if clear_conversation_state(chat_id):
         await update.message.reply_text('🔄 Started a new conversation! Previous context has been cleared.')
     else:
         await update.message.reply_text('🔄 Starting fresh! This is already a new conversation.')
@@ -122,8 +123,8 @@ async def instruct_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         # Get model from environment
         model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         
-        # Update the assistant instructions
-        await update_assistant_instructions(new_instructions, model)
+        # Update system instructions by clearing conversation state
+        update_system_instructions(new_instructions, update.message.chat.id)
         
         await update.message.reply_text(f'✅ Assistant instructions updated!\n\nNew instructions: "{new_instructions}"')
         
