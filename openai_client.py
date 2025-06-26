@@ -46,8 +46,33 @@ def update_system_instructions(new_instructions: str, chat_id: int) -> bool:
         return True
     return False
 
+def stream_openai_responses(user_message: str, chat_id: int, model: str, system_prompt: str):
+    """Stream response using OpenAI Responses API with conversation state."""
+    client = get_openai_client()
+    
+    # Get previous response ID if exists
+    previous_response_id = None
+    if chat_id in conversation_state:
+        previous_response_id = conversation_state[chat_id]["previous_response_id"]
+    
+    # Format input messages
+    input_messages = get_responses_input(user_message, system_prompt, previous_response_id)
+    
+    # Create streaming response
+    response_params = {
+        "model": model,
+        "input": input_messages,
+        "stream": True
+    }
+    
+    if previous_response_id:
+        response_params["previous_response_id"] = previous_response_id
+    
+    print(f"Starting streaming response for chat {chat_id}")
+    return client.responses.create(**response_params)
+
 def get_openai_responses_response(user_message: str, chat_id: int, model: str, system_prompt: str) -> tuple[str, str]:
-    """Get response using OpenAI Responses API with conversation state."""
+    """Get response using OpenAI Responses API with conversation state (non-streaming fallback)."""
     client = get_openai_client()
     
     # Get previous response ID if exists

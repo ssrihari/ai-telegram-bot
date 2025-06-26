@@ -1,11 +1,12 @@
 import os
 import json
 import asyncio
+import time
 from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from openai_client import get_openai_responses_response, clear_conversation_state, update_system_instructions
+from openai_client import get_openai_responses_response, stream_openai_responses, clear_conversation_state, update_system_instructions
 
 load_dotenv()
 
@@ -44,8 +45,8 @@ def load_enhanced_system_prompt() -> str:
         print(f"Error loading how-to-talk-to-kids.md: {e}")
         return base_prompt
 
-def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: int = None) -> str:
-    """Get response from OpenAI using Assistants API."""
+async def stream_llm_response(user_message: str, telegram_update: dict, chat_id: int, update: Update):
+    """Stream response from OpenAI and send paragraphs to Telegram as they arrive."""
     try:
         # Get enhanced system prompt with book content
         system_prompt = load_enhanced_system_prompt()
@@ -53,20 +54,80 @@ def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: i
         # Get model from environment or use default
         model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         
-        # Use OpenAI Responses API for conversation state
-        llm_response, response_id = get_openai_responses_response(
-            user_message, chat_id, model, system_prompt
-        )
+        print(f"[TIMING] Starting streaming request at: {datetime.now().isoformat()}")
+        stream_start = time.time()
+        
+        # Get streaming response from OpenAI
+        stream = stream_openai_responses(user_message, chat_id, model, system_prompt)
+        
+        # Buffer for accumulating text
+        current_text = ""
+        sent_paragraphs = []
+        response_id = None
+        first_chunk_time = None
+        
+        for chunk in stream:
+            if first_chunk_time is None:
+                first_chunk_time = time.time()
+                print(f"[TIMING] First chunk received at: {datetime.now().isoformat()} (after {(first_chunk_time - stream_start)*1000:.1f}ms)")
+            
+            # Handle different types of streaming events
+            if hasattr(chunk, 'type'):
+                if chunk.type == 'content.delta':
+                    # Accumulate text content
+                    if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
+                        current_text += chunk.delta.text
+                        
+                        # Check for complete paragraphs (double newline)
+                        while '\n\n' in current_text:
+                            paragraph_end = current_text.find('\n\n')
+                            paragraph = current_text[:paragraph_end].strip()
+                            current_text = current_text[paragraph_end + 2:]
+                            
+                            if paragraph and paragraph not in sent_paragraphs:
+                                paragraph_send_start = time.time()
+                                await update.message.reply_text(paragraph)
+                                paragraph_send_end = time.time()
+                                sent_paragraphs.append(paragraph)
+                                print(f"[TIMING] Paragraph sent in {(paragraph_send_end - paragraph_send_start)*1000:.1f}ms: {paragraph[:50]}...")
+                
+                elif chunk.type == 'response.done':
+                    # Stream completed, get response ID
+                    if hasattr(chunk, 'response'):
+                        response_id = chunk.response.id
+                        print(f"[TIMING] Stream completed at: {datetime.now().isoformat()}")
+                        
+                        # Update conversation state
+                        from openai_client import conversation_state
+                        conversation_state[chat_id] = {
+                            "previous_response_id": response_id
+                        }
+        
+        # Send any remaining text as final paragraph
+        if current_text.strip() and current_text.strip() not in sent_paragraphs:
+            await update.message.reply_text(current_text.strip())
+            sent_paragraphs.append(current_text.strip())
+            print(f"[TIMING] Final paragraph sent: {current_text.strip()[:50]}...")
+        
+        # Combine all paragraphs for logging
+        full_response = '\n\n'.join(sent_paragraphs)
         
         # Log successful interaction
-        log_llm_interaction(user_message, llm_response, model, telegram_update, response_id=response_id)
+        log_llm_interaction(user_message, full_response, model, telegram_update, response_id=response_id)
         
-        return llm_response
+        stream_end = time.time()
+        total_time = stream_end - stream_start
+        print(f"[TIMING SUMMARY] Total streaming time: {total_time*1000:.1f}ms | Paragraphs sent: {len(sent_paragraphs)}")
+        
+        return full_response
         
     except Exception as e:
         error_msg = str(e)
-        print(f"OpenAI error: {error_msg}")
+        print(f"OpenAI streaming error: {error_msg}")
         fallback_response = "Sorry, I'm having trouble processing your message right now."
+        
+        # Send fallback response
+        await update.message.reply_text(fallback_response)
         
         # Log failed interaction
         log_llm_interaction(user_message, fallback_response, model or "gpt-4o", telegram_update, error_msg)
@@ -74,7 +135,10 @@ def get_llm_response(user_message: str, telegram_update: dict = None, chat_id: i
         return fallback_response
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle any incoming message and respond using LLM."""
+    """Handle any incoming message and respond using streaming LLM."""
+    request_start = time.time()
+    print(f"[TIMING] Request received at: {datetime.now().isoformat()}")
+    
     user_message = update.message.text
     chat_id = update.message.chat.id
     
@@ -87,14 +151,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Convert Telegram update to dict for logging
     telegram_update_dict = update.to_dict()
     
-    # Get LLM response with chat context
-    llm_response = get_llm_response(user_message, telegram_update_dict, chat_id)
+    # Stream LLM response and send paragraphs as they arrive
+    await stream_llm_response(user_message, telegram_update_dict, chat_id, update)
     
-    # Split response into paragraphs and send each as separate message
-    paragraphs = [p.strip() for p in llm_response.split('\n\n') if p.strip()]
-    
-    for paragraph in paragraphs:
-        await update.message.reply_text(paragraph)
+    request_end = time.time()
+    total_time = request_end - request_start
+    print(f"[TIMING] Total request time: {total_time*1000:.1f}ms")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle the /start command."""
