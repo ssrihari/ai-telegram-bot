@@ -59,6 +59,6 @@ deploy: ## Deploy to Fly.io
 		flyctl secrets set OPENAI_MODEL=$$(grep OPENAI_MODEL .env | cut -d'=' -f2) || echo "Failed to set OPENAI_MODEL"; \
 	fi
 	@if [ -f persona.md ]; then \
-		flyctl secrets set SYSTEM_PROMPT="$$(cat persona.md)" || echo "Failed to set SYSTEM_PROMPT"; \
+		flyctl secrets set SYSTEM_PROMPT=$$(grep SYSTEM_PROMPT .env | cut -d'=' -f2) || echo "Failed to set SYSTEM_PROMPT"; \
 	fi
 	flyctl deploy

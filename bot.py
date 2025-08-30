@@ -31,18 +31,21 @@ def load_enhanced_system_prompt() -> str:
     """Load system prompt from environment and append how-to-talk-to-kids.md content."""
     base_prompt = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
     
-    try:
-        with open('how-to-talk-to-kids.md', 'r', encoding='utf-8') as f:
-            book_content = f.read()
-        
-        enhanced_prompt = f"{base_prompt}\n\n```\n{book_content}\n```"
-        return enhanced_prompt
-    except FileNotFoundError:
-        print("Warning: how-to-talk-to-kids.md not found, using base prompt only")
-        return base_prompt
-    except Exception as e:
-        print(f"Error loading how-to-talk-to-kids.md: {e}")
-        return base_prompt
+    # Commented out PDF/markdown attachment - using only .env file content
+    # try:
+    #     with open('how-to-talk-to-kids.md', 'r', encoding='utf-8') as f:
+    #         book_content = f.read()
+    #     
+    #     enhanced_prompt = f"{base_prompt}\n\n```\n{book_content}\n```"
+    #     return enhanced_prompt
+    # except FileNotFoundError:
+    #     print("Warning: how-to-talk-to-kids.md not found, using base prompt only")
+    #     return base_prompt
+    # except Exception as e:
+    #     print(f"Error loading how-to-talk-to-kids.md: {e}")
+    #     return base_prompt
+    
+    return base_prompt
 
 async def stream_llm_response(user_message: str, telegram_update: dict, chat_id: int, update: Update):
     """Stream response from OpenAI and send paragraphs to Telegram as they arrive."""
